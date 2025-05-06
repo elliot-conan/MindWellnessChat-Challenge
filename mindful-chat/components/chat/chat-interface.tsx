@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Clock,
   UserPlus,
+  LogOut,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { CurrentUserAvatar } from "@/components/current-user-avatar"
@@ -590,7 +591,7 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-72" align="end">
-              <div className="flex flex-col space-y-4">
+                <div className="flex flex-col space-y-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={currentUser.avatar_url || ""} />
@@ -632,7 +633,24 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
                   </Button>
                 </div>
 
-                <div className="border-t pt-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full flex items-center justify-center mt-2"
+                  onClick={async () => {
+                    try {
+                      await supabase.auth.signOut();
+                      window.location.href = "/auth/login";
+                    } catch (error) {
+                      console.error("Error signing out:", error);
+                    }
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-1" />
+                  Sign Out
+                </Button>
+
+                <div className="border-t pt-2 mt-2">
                   {/* Notification settings */}
                   <NotificationSettings userId={currentUser.id} />
                 </div>
@@ -732,56 +750,76 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
 
                   {/* User profile section */}
                   <div className="p-4 mt-auto border-t border-border">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <div className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded-md">
-                          <CurrentUserAvatar />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {currentUser.first_name
-                                ? `${currentUser.first_name} ${currentUser.last_name || ""}`
-                                : currentUser.username || "User"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {currentUser.role === "professional" ? "Mental Health Professional" : "Patient"}
-                            </p>
-                          </div>
-                          <Button variant="ghost" size="icon" className="ml-auto">
-                            <UserCog className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-72" align="start">
-                        <div className="flex flex-col space-y-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-12 w-12">
-                              <AvatarImage src={currentUser.avatar_url || ""} />
-                              <AvatarFallback>
-                                {currentUser.first_name?.[0] || currentUser.username?.[0] || "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <h4 className="text-sm font-semibold">
+                    <div className="flex flex-col gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <div className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded-md">
+                            <CurrentUserAvatar />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
                                 {currentUser.first_name
                                   ? `${currentUser.first_name} ${currentUser.last_name || ""}`
                                   : currentUser.username || "User"}
-                              </h4>
-                              <p className="text-xs text-muted-foreground flex items-center">
-                                <Badge variant="outline" className="text-xs mr-1">
-                                  {currentUser.role === "professional" ? "Mental Health Professional" : "Patient"}
-                                </Badge>
-                                {currentUser.username && <span>@{currentUser.username}</span>}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {currentUser.role === "professional" ? "Mental Health Professional" : "Patient"}
                               </p>
                             </div>
+                            <Button variant="ghost" size="icon" className="ml-auto">
+                              <UserCog className="h-4 w-4" />
+                            </Button>
                           </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72" align="start">
+                          <div className="flex flex-col space-y-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-12 w-12">
+                                <AvatarImage src={currentUser.avatar_url || ""} />
+                                <AvatarFallback>
+                                  {currentUser.first_name?.[0] || currentUser.username?.[0] || "U"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h4 className="text-sm font-semibold">
+                                  {currentUser.first_name
+                                    ? `${currentUser.first_name} ${currentUser.last_name || ""}`
+                                    : currentUser.username || "User"}
+                                </h4>
+                                <p className="text-xs text-muted-foreground flex items-center">
+                                  <Badge variant="outline" className="text-xs mr-1">
+                                    {currentUser.role === "professional" ? "Mental Health Professional" : "Patient"}
+                                  </Badge>
+                                  {currentUser.username && <span>@{currentUser.username}</span>}
+                                </p>
+                              </div>
+                            </div>
 
-                          <div className="border-t pt-2">
-                            {/* Notification settings */}
-                            <NotificationSettings userId={currentUser.id} />
+                            <div className="border-t pt-2">
+                              {/* Notification settings */}
+                              <NotificationSettings userId={currentUser.id} />
+                            </div>
                           </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                        </PopoverContent>
+                      </Popover>
+                      
+                      {/* Sign out button for mobile */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full flex items-center justify-center mt-1"
+                        onClick={async () => {
+                          try {
+                            await supabase.auth.signOut();
+                            window.location.href = "/auth/login";
+                          } catch (error) {
+                            console.error("Error signing out:", error);
+                          }
+                        }}
+                      >
+                        <LogOut className="h-4 w-4 mr-1" />
+                        Sign Out
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </SheetContent>
@@ -795,18 +833,18 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
         <div className="h-full border-l border-border w-64 p-4 overflow-y-auto">
           <div className="flex flex-col items-center mb-4">
             <Avatar className="h-16 w-16 mb-2">
-              <AvatarImage src={otherParticipant.avatar_url || ""} />
+              <AvatarImage src={otherParticipant?.avatar_url || ""} />
               <AvatarFallback>
-                {(otherParticipant.first_name?.[0] || "") + (otherParticipant.last_name?.[0] || "")}
+                {(otherParticipant?.first_name?.[0] || "") + (otherParticipant?.last_name?.[0] || "")}
               </AvatarFallback>
             </Avatar>
             <h2 className="text-lg font-semibold">
-              {otherParticipant.first_name
+              {otherParticipant?.first_name
                 ? `${otherParticipant.first_name} ${otherParticipant.last_name || ""}`
-                : otherParticipant.username || "Unknown"}
+                : otherParticipant?.username || "Unknown"}
             </h2>
             <div className="flex items-center text-sm mt-1 text-muted-foreground">
-              {otherParticipant.role === "professional" ? (
+              {otherParticipant?.role === "professional" ? (
                 <>
                   <Stethoscope className="h-3 w-3 mr-1" />
                   <span>Mental Health Professional</span>
@@ -821,7 +859,7 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
           </div>
 
           <div className="space-y-4">
-            {otherParticipant.username && (
+            {otherParticipant?.username && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Username</p>
                 <p className="text-sm">{otherParticipant.username}</p>
@@ -847,7 +885,7 @@ export default function ChatInterface({ currentUser, initialRooms }: ChatInterfa
       <div className="flex-1 flex flex-col overflow-hidden">
         {selectedRoom ? (
           /* Show chat room when a room is selected */
-          <ChatRoom room={selectedRoom} currentUser={currentUser} />
+          <ChatRoom room={selectedRoom as Room} currentUser={currentUser} />
         ) : (
           /* Show room list when no room is selected */
           <div className="flex-1 overflow-y-auto p-2">

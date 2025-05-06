@@ -1,139 +1,212 @@
-# Mental Health Chat App
+# MindfulChat - Mental Health Chat Application
 
-A secure, supportive platform for mental health conversations. Connect with others, access resources, and prioritize your wellbeing in a safe environment.
+MindfulChat is a real-time chat application designed specifically for mental health support, connecting patients with mental health professionals in a secure, user-friendly environment.
 
-## Features
+## Overview
 
-- **Secure Messaging**: Private one-on-one conversations
-- **Crisis Detection**: Intelligent detection of crisis language with immediate resource suggestions
-- **Mental Health Resources**: Access to crisis hotlines and mental health tips
-- **User Authentication**: Secure login and registration with email verification
+MindfulChat facilitates communication between patients and mental health professionals through:
+- Private 1:1 sessions
+- Group support rooms
+- Crisis detection with immediate resource connections
+- Real-time message delivery and read status tracking
+- Message reactions & Emoji support
+- User presence indicators
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 with App Router, TypeScript, TailwindCSS
-- **Backend**: Supabase (PostgreSQL, Authentication, Realtime)
-- **State Management**: React Context API, React Query
-- **Deployment**: Vercel (frontend), Supabase (backend)
+### Frontend
+- **Next.js 15.x** - React framework with App Router
+- **React 19** - UI library
+- **TailwindCSS** - Utility-first CSS framework
+- **ShadCN UI** - Component library based on Radix UI
+- **next-themes** - Theme management (light/dark mode)
+- **Lucide React** - Icon library
+
+### Backend
+- **Supabase** - Backend-as-a-Service platform providing:
+  - Authentication (OAuth and email/password)
+  - PostgreSQL database
+  - Row-Level Security (RLS) policies
+  - Database functions and triggers
+  - Realtime messaging with Pub/Sub
+  - Storage for user avatars
+
+## Features
+
+### Authentication & User Management
+- **Multiple Auth Methods** - Email/password and OAuth providers
+- **User Profiles** - Customizable with avatar, name, and role settings
+- **Role-Based Access** - Different views and capabilities for patients and mental health professionals
+
+### Chat System
+- **Real-time Messaging** - Instant message delivery with Supabase Realtime
+- **Message Status Tracking** - Delivered and read indicators for messages
+- **User Presence** - See who's currently online in chat rooms
+- **Emoji Reactions** - React to messages with emoji
+- **1:1 and Group Sessions** - Support for both individual therapy and group support
+
+### Mental Health Features
+- **Session Approval Workflow** - Mental health professionals can approve patient connection requests
+- **Crisis Detection System** - Automatically identifies potentially concerning messages
+- **Crisis Resources** - Provides immediate access to crisis hotlines and support resources
+- **Standardized Naming Convention** - Sessions display as "Patient Name <-> Professional Name"
+
+### UI/UX
+- **Responsive Design** - Mobile-first approach for all device sizes
+- **Dark/Light Themes** - User-selectable appearance
+- **Accessibility** - Keyboard navigation and screen reader support
+- **Toast Notifications** - Non-intrusive alerts for system events
+
+## Database Schema
+
+### Database Diagram
+
+```
++-------------------+       +-------------------+       +-------------------+
+|    profiles       |       |      rooms        |       | room_participants |
++-------------------+       +-------------------+       +-------------------+
+| id (PK)           |       | id (PK)           |       | id (PK)           |
+| username          |       | name              |       | room_id (FK)      |
+| first_name        |       | description       |       | profile_id (FK)   |
+| last_name         |       | is_private        |       | created_at        |
+| avatar_url        | <--+  | created_by (FK)   |       | updated_at        |
+| role              |    |  | room_type         | <--+  | metadata          |
+| is_verified       |    |  | patient_id (FK)   |    |  +-------------------+
+| created_at        |    |  | doctor_id (FK)    |    |
+| updated_at        |    |  | status            |    |
++-------------------+    |  | metadata          |    |
+        ^                |  | created_at        |    |  +-------------------+
+        |                |  | updated_at        |    |  |     messages      |
+        |                |  +-------------------+    |  +-------------------+
+        |                |          ^                |  | id (PK)           |
+        |                |          |                |  | room_id (FK)      |
+        |                +----------+                +--| profile_id (FK)   |
+        |                                               | content           |
+        |      +-------------------+                    | created_at        |
+        |      |  message_reactions|                    | updated_at        |
+        |      +-------------------+                    | delivered_at      |
+        +------| profile_id (FK)   |                    | read_at           |
+               | message_id (FK)   | <------------------| recipient_id (FK) |
+               | reaction_type     |                    +-------------------+
+               | created_at        |                             ^
+               +-------------------+                             |
+                                                                 |
+                                               +-------------------+
+                                               |   notifications   |
+                                               +-------------------+
+                                               | id (PK)           |
+                                               | profile_id (FK)   |
+                                               | type              |
+                                               | content           |
+                                               | read_at           |
+                                               | created_at        |
+                                               | metadata          |
+                                               +-------------------+
+```
+
+### Tables
+- **profiles** - Extended user profiles with roles (professional/patient)
+- **rooms** - Chat rooms including 1:1 sessions and group chats
+- **room_participants** - Tracks room membership and permissions
+- **messages** - Stores chat messages with delivery/read status
+- **message_reactions** - Emoji reactions for messages
+- **notifications** - System notifications for new messages, requests, etc.
+
+### Database Functions
+- **mark_message_as_delivered** - Updates message delivery status
+- **mark_message_as_read** - Updates message read status
+- **create_message_request** - Creates a pending session request
+- **handle_message_request** - Approves or declines session requests
+- **handle_message_request_notification** - Creates notifications for requests
+- **handle_new_message_notification** - Notifies participants of new messages
 
 ## Getting Started
 
 ### Prerequisites
-
-- Node.js 20.x or later
+- Node.js 18+ 
 - npm or yarn
 - Supabase account
 
-### Environment Setup
+### Installation
 
 1. Clone the repository
-2. Create a `.env.local` file in the root directory with the following variables:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+git clone https://github.com/your-username/mindfulchat.git
+cd mindfulchat
 ```
 
-3. Install dependencies:
-
+2. Install dependencies
 ```bash
 npm install
 # or
 yarn install
 ```
 
-### Database Setup
+3. Set up environment variables
+Create a `.env.local` file with the following variables:
+```
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-1. Create a new Supabase project
-2. Run the SQL scripts in `src/db/schema.sql` in the Supabase SQL editor to set up the database schema
-
-### Running the Development Server
-
+4. Run the development server
 ```bash
 npm run dev
 # or
 yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-## Project Structure
-
-```
-wellness-chat/
-├── public/              # Static assets
-├── src/
-│   ├── app/             # Next.js App Router pages
-│   │   ├── auth/        # Authentication pages
-│   │   ├── dashboard/   # Dashboard and conversation pages
-│   │   ├── resources/   # Mental health resources page
-│   │   ├── layout.tsx   # Root layout
-│   │   └── page.tsx     # Home page
-│   ├── components/      # React components
-│   │   ├── auth/        # Authentication components
-│   │   └── providers/   # Context providers
-│   ├── contexts/        # React contexts
-│   ├── db/              # Database schema and migrations
-│   └── utils/           # Utility functions
-├── .env.local           # Environment variables (not in repo)
-├── next.config.ts       # Next.js configuration
-└── tsconfig.json        # TypeScript configuration
-```
-
-## Features in Detail
-
-### Authentication
-
-The app uses Supabase Authentication for user management:
-- Email/password registration with email verification
-- Secure login with JWT tokens
-- Password reset functionality
-
-### Messaging
-
-- Real-time messaging using Supabase Realtime
-- Message history with timestamps
-- User online/offline status
-
-### Crisis Detection
-
-The app includes a simple crisis detection system that:
-- Scans messages for crisis keywords
-- Provides immediate resources when crisis language is detected
-- Offers different levels of support based on detected risk level
-
-### Mental Health Resources
-
-- Directory of crisis hotlines and support services
-- Mental health tips and best practices
-- Accessible to both logged-in and anonymous users
+5. Open [http://localhost:3000](http://localhost:3000) to view the application
 
 ## Deployment
 
-### Frontend Deployment (Vercel)
+The application can be deployed on any platform that supports Next.js:
 
-1. Connect your GitHub repository to Vercel
-2. Add the environment variables in the Vercel project settings
-3. Deploy the project
+- **Vercel**: Recommended for easiest deployment
+- **Netlify**: Good alternative with similar capabilities
+- **Self-hosted**: Can be built and served from any Node.js server
 
-### Backend Deployment (Supabase)
+## Usage
 
-The backend is already deployed on Supabase when you create your project. Make sure to:
-1. Set up appropriate Row Level Security policies
-2. Configure authentication providers
-3. Enable realtime functionality for the required tables
+### For Patients
+1. Create an account and complete your profile
+2. Request a session with a mental health professional
+3. Once approved, communicate through the private chat
+4. Access crisis resources when needed
 
-## Contributing
+### For Mental Health Professionals
+1. Create an account with the professional role
+2. Approve or decline patient session requests
+3. Manage multiple patient conversations
+4. Initiate new sessions with patients
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Crisis Assessment Feature
+
+MindfulChat includes an automated system to detect potentially concerning messages using keyword analysis. When a message contains crisis-related terms (such as "suicide" or "self-harm"), the system automatically provides a dialog with:
+
+- Immediate access to crisis hotlines
+- Crisis text line information
+- Specialized resources (LGBTQ+, Veterans)
+- Emergency service reminders
+
+This feature aims to provide timely support resources without interrupting the therapeutic conversation.
+
+## Security and Privacy
+
+- **Row Level Security (RLS)**: Ensures users can only access data they're authorized to see
+- **Encrypted Communication**: All data is transmitted over HTTPS
+- **Authentication**: Secure user verification with Supabase Auth
+- **Data Isolation**: Strict separation of chat sessions and user data
+
+## Future Enhancements (Some cool stuff I could do with this)
+
+- Video/audio sessions capability
+- Mental health professional private notes.
+- E2E encryption for chats (Worked on this for way too long, but needs more time than I can dedicate to it)
+- Appointment scheduling
+- Journaling features
+- Expanded crisis resource localization
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgements
-
-- [Next.js](https://nextjs.org/)
-- [Supabase](https://supabase.io/)
-- [TailwindCSS](https://tailwindcss.com/)
-- Mental health resources and crisis services
+I just did this for a fun interview challenge so imma just put this under COPYLEFT license, you may use it for whatever you want, enjoy!
