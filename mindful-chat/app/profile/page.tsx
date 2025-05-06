@@ -9,10 +9,12 @@ import { redirect, useRouter } from 'next/navigation'
 import { Heart, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
+  const [isNew, setIsNew] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -23,16 +25,36 @@ export default function ProfilePage() {
         redirect('/auth/login')
       }
 
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
+      try {
+        // Try to fetch existing profile
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
 
-      if (error) {
-        console.error('Error fetching profile:', error)
-      } else {
-        setProfile(profileData)
+        if (error) {
+          if (error.code === 'PGRST116') { // Record not found error
+            // For new users without a profile
+            setIsNew(true)
+            // Create an empty profile object with just the ID
+            setProfile({
+              id: session.user.id,
+              username: null,
+              first_name: null,
+              last_name: null,
+              avatar_url: null
+            })
+          } else {
+            console.error('Error fetching profile:', error)
+            toast.error('Failed to load profile data')
+          }
+        } else {
+          setProfile(profileData)
+          setIsNew(false)
+        }
+      } catch (err) {
+        console.error('Error in profile check:', err)
       }
 
       setIsLoading(false)
@@ -58,7 +80,7 @@ export default function ProfilePage() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => router.push('/dashboard')} 
+              onClick={() => isNew ? router.push('/chat') : router.push('/dashboard')} 
               className="mr-2"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -84,13 +106,17 @@ export default function ProfilePage() {
                 </>
               ) : (
                 <>
-                  <CardTitle className="text-2xl">Profile Settings</CardTitle>
-                  <CardDescription>Update your profile information and avatar</CardDescription>
+                  <CardTitle className="text-2xl">{isNew ? 'Complete Your Profile' : 'Profile Settings'}</CardTitle>
+                  <CardDescription>
+                    {isNew 
+                      ? 'Please provide your details to complete your profile setup' 
+                      : 'Update your profile information and avatar'}
+                  </CardDescription>
                 </>
               )}
             </CardHeader>
             <CardContent>
-              {isLoading ? <LoadingContent /> : (profile && <ProfileForm profile={profile} />)}
+              {isLoading ? <LoadingContent /> : (profile && <ProfileForm profile={profile} isNew={isNew} />)}
             </CardContent>
           </Card>
         </div>

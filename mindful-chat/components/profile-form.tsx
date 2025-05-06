@@ -18,9 +18,10 @@ interface ProfileFormProps {
     last_name: string | null
     avatar_url: string | null
   }
+  isNew?: boolean
 }
 
-export function ProfileForm({ profile }: ProfileFormProps) {
+export function ProfileForm({ profile, isNew = false }: ProfileFormProps) {
   const supabase = createClient()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -150,17 +151,34 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         }
       }
       
-      // Update profile in the database
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          username,
-          first_name: firstName,
-          last_name: lastName,
-          avatar_url: finalAvatarUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id)
+      // Create or update profile in the database
+      const profileData = {
+        username,
+        first_name: firstName,
+        last_name: lastName,
+        avatar_url: finalAvatarUrl,
+        updated_at: new Date().toISOString(),
+      };
+      
+      let error;
+      
+      // Use upsert for new profiles, update for existing ones
+      if (isNew) {
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: profile.id,
+            ...profileData,
+            created_at: new Date().toISOString(),
+          });
+        error = upsertError;
+      } else {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update(profileData)
+          .eq('id', profile.id);
+        error = updateError;
+      }
       
       if (error) throw error
       
@@ -248,7 +266,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         {(isLoading || uploadingAvatar) && (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         )}
-        {isLoading ? 'Saving...' : 'Save Changes'}
+        {isLoading ? 'Saving...' : isNew ? 'Create Profile' : 'Save Changes'}
       </Button>
     </form>
   )

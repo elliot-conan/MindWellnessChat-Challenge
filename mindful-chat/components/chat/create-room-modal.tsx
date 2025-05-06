@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Room, Profile } from './types'
+import { Room, Profile } from './types' // Assuming ./types.ts or similar defines these
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,8 +31,9 @@ export function CreateRoomModal({
   const supabase = createClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [isPrivate, setIsPrivate] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false) // Group sessions are public by default
   const [roomType, setRoomType] = useState<'group' | '1:1'>('group')
+  // Removed isGroupTherapy state, will derive from roomType
   const [selectedPatient, setSelectedPatient] = useState<Profile | null>(null)
   const [selectedProfessional, setSelectedProfessional] = useState<Profile | null>(null)
   const [patients, setPatients] = useState<Profile[]>([])
@@ -43,56 +44,62 @@ export function CreateRoomModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch patients when component mounts or search changes (for professionals)
+  // Fetch patients when search is active for professionals selecting a patient
   useEffect(() => {
     const fetchPatients = async () => {
-      if (currentUserRole !== 'professional' || !showPatientSearch) return;
+      if (currentUserRole !== 'professional' || !showPatientSearch) {
+        if (!searchQuery) setPatients([]); // Clear if search is not active and no query
+        return;
+      }
       
       try {
-        const query = supabase
+        let query = supabase
           .from('profiles')
           .select('*')
           .eq('role', 'patient');
           
-        // Add search filter if there's a query
         if (searchQuery) {
-          query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,username.ilike.%${searchQuery}%`);
+          query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,username.ilike.%${searchQuery}%`);
         }
         
-        const { data, error } = await query.limit(10);
+        const { data, error: fetchError } = await query.limit(10);
         
-        if (error) throw error;
+        if (fetchError) throw fetchError;
         setPatients(data || []);
       } catch (err) {
         console.error('Error fetching patients:', err);
+        setPatients([]); // Clear patients on error
       }
     };
     
     fetchPatients();
   }, [supabase, currentUserRole, searchQuery, showPatientSearch]);
   
-  // Fetch professionals when component mounts or search changes (for patients)
+  // Fetch professionals when search is active for patients selecting a professional
   useEffect(() => {
     const fetchProfessionals = async () => {
-      if (currentUserRole !== 'patient' || !showProfessionalSearch) return;
+      if (currentUserRole !== 'patient' || !showProfessionalSearch) {
+        if (!searchQuery) setProfessionals([]); // Clear if search is not active and no query
+        return;
+      }
       
       try {
-        const query = supabase
+        let query = supabase
           .from('profiles')
           .select('*')
           .eq('role', 'professional');
           
-        // Add search filter if there's a query
         if (searchQuery) {
-          query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,username.ilike.%${searchQuery}%`);
+          query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,username.ilike.%${searchQuery}%`);
         }
         
-        const { data, error } = await query.limit(10);
+        const { data, error: fetchError } = await query.limit(10);
         
-        if (error) throw error;
+        if (fetchError) throw fetchError;
         setProfessionals(data || []);
       } catch (err) {
         console.error('Error fetching professionals:', err);
+        setProfessionals([]); // Clear professionals on error
       }
     };
     
@@ -100,144 +107,141 @@ export function CreateRoomModal({
   }, [supabase, currentUserRole, searchQuery, showProfessionalSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Auto-generate name for 1:1 sessions
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    let effectiveRoomName = name.trim();
+
     if (roomType === '1:1') {
+      let generatedName = '';
+      const professionalDisplayName = currentUser?.first_name || currentUser?.username || 'Professional';
+      const patientDisplayName = currentUser?.first_name || currentUser?.username || 'Patient';
+
       if (currentUserRole === 'professional' && selectedPatient) {
-        const patientName = selectedPatient.first_name || selectedPatient.username || 'Patient';
-        const professionalName = currentUser?.first_name || currentUser?.username || 'Professional';
-        setName(`${patientName} <-> ${professionalName}`);
+        const selectedPatientName = selectedPatient.first_name || selectedPatient.username || 'Patient';
+        generatedName = `${selectedPatientName} <-> ${professionalDisplayName}`;
       } else if (currentUserRole === 'patient' && selectedProfessional) {
-        const patientName = currentUser?.first_name || currentUser?.username || 'Patient';
-        const professionalName = selectedProfessional.first_name || selectedProfessional.username || 'Professional';
-        setName(`${patientName} <-> ${professionalName}`);
+        const selectedProfessionalName = selectedProfessional.first_name || selectedProfessional.username || 'Professional';
+        generatedName = `${patientDisplayName} <-> ${selectedProfessionalName}`;
+      }
+
+      if (generatedName) {
+        setName(generatedName); // Update state for UI consistency
+        effectiveRoomName = generatedName; // Use this for the current submission logic
       }
     }
-    
-    e.preventDefault()
-    
-    if (!name.trim()) {
-      setError('Room name is required')
-      return
-    }
-    
-    // For 1:1 sessions, a patient must be selected
-    if (roomType === '1:1' && !selectedPatient && currentUserRole === 'professional') {
-      setError('Please select a patient for the 1:1 session')
-      return
+
+    if (!effectiveRoomName) {
+      setError('Room name is required');
+      setLoading(false);
+      return;
     }
 
-    setLoading(true)
-    setError(null)
+    if (roomType === '1:1') {
+      if (currentUserRole === 'professional' && !selectedPatient) {
+        setError('Please select a patient for the 1:1 session');
+        setLoading(false);
+        return;
+      }
+      if (currentUserRole === 'patient' && !selectedProfessional) {
+        setError('Please select a mental health professional for the 1:1 session');
+        setLoading(false);
+        return;
+      }
+    }
 
     try {
-      // Different handling based on room type and user role
       if (roomType === '1:1' && currentUserRole === 'patient' && selectedProfessional) {
-        // Patient is creating a message request to a professional - use the database function
-        const { data, error } = await supabase
-          .rpc('create_message_request', {
-            p_name: name.trim(),
-            p_description: description.trim() || null,
-            p_doctor_id: selectedProfessional.id,
-            p_patient_id: currentUserId
-          })
-          
-        if (error) throw error;
-        
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to create message request');
+        // Patient is creating a message request to a professional
+        const { data: rpcData, error: rpcError } = await supabase.rpc('create_message_request', {
+          p_name: effectiveRoomName,
+          p_description: description.trim() || null,
+          p_doctor_id: selectedProfessional.id,
+          p_patient_id: currentUserId,
+        });
+
+        if (rpcError) throw rpcError;
+        if (!rpcData || !rpcData.success) {
+          throw new Error(rpcData?.message || 'Failed to create message request');
         }
-        
-        // Create a room object to return to the parent component
-        const roomData = {
-          id: data.room_id,
-          name: name.trim(),
+
+        const newRoom: Room = {
+          id: rpcData.room_id,
+          name: effectiveRoomName,
           description: description.trim() || null,
-          is_private: isPrivate,
+          is_private: true, // 1:1 message requests are implicitly private
           created_by: currentUserId,
           room_type: '1:1',
           doctor_id: selectedProfessional.id,
           patient_id: currentUserId,
-          status: 'pending',
+          status: 'pending', // Message requests are pending
           metadata: {
             purpose: 'mental_health',
             created_at: new Date().toISOString(),
             message_request: true,
-            requested_at: new Date().toISOString()
-          }
+            requested_at: new Date().toISOString(),
+          },
         };
-        
-        // Show a message with the result
-        alert(data.message || "Message request sent to Mental Health Professional");
-        
-        // Notify parent and close modal
-        onRoomCreated(roomData as Room);
+        alert(rpcData.message || 'Message request sent to Mental Health Professional');
+        onRoomCreated(newRoom);
         handleClose();
-        return;
+        // setLoading(false) is handled in finally block
+        return; 
       } else {
-        // Regular room creation flow (for professionals or group chats)
-        // Set up room data based on the type of room
-        const roomInsertData: any = {
-          name: name.trim(),
+        // Professional creating 1:1 or any user creating a group session
+        const roomInsertData: any = { // Consider creating a more specific type if possible
+          name: effectiveRoomName,
           description: description.trim() || null,
-          is_private: isPrivate,
+          is_private: roomType === 'group' ? isPrivate : true, // 1:1s are always private
           created_by: currentUserId,
           room_type: roomType,
+          status: 'active', // Default status; 'pending' for patient requests is handled above
           metadata: {
             purpose: 'mental_health',
             created_at: new Date().toISOString(),
+            group_therapy: roomType === 'group', // Simplified from isGroupTherapy state
           },
         };
-        
-        // For 1:1 rooms created by professionals
+
         if (roomType === '1:1' && currentUserRole === 'professional' && selectedPatient) {
           roomInsertData.doctor_id = currentUserId;
           roomInsertData.patient_id = selectedPatient.id;
-          roomInsertData.status = 'active'; // Professional-initiated sessions are active immediately
+          // status 'active' is already set by default for this flow
         }
         
-        // 1. Create the room
-        const { data: roomData, error: roomError } = await supabase
+        const { data: newRoomData, error: roomError } = await supabase
           .from('rooms')
           .insert(roomInsertData)
           .select()
-          .single()
-  
-        if (roomError) throw roomError
-  
-        // 2. Add the creator as a participant
+          .single();
+
+        if (roomError) throw roomError;
+        if (!newRoomData) throw new Error("Room creation failed to return data.");
+
+        // Add creator as participant
         const { error: participantError } = await supabase
           .from('room_participants')
-          .insert({
-            room_id: roomData.id,
-            profile_id: currentUserId,
-          })
-          
-        if (participantError) throw participantError
-        
-        // 3. For 1:1 rooms, add the patient as a participant
+          .insert({ room_id: newRoomData.id, profile_id: currentUserId });
+
+        if (participantError) throw participantError;
+
+        // For 1:1 rooms created by professionals, add the patient as a participant
         if (roomType === '1:1' && currentUserRole === 'professional' && selectedPatient) {
           const { error: patientParticipantError } = await supabase
             .from('room_participants')
-            .insert({
-              room_id: roomData.id,
-              profile_id: selectedPatient.id,
-            })
-            
-          if (patientParticipantError) throw patientParticipantError
+            .insert({ room_id: newRoomData.id, profile_id: selectedPatient.id });
+
+          if (patientParticipantError) throw patientParticipantError;
         }
-        
-        // Notify parent and close modal
-        onRoomCreated(roomData as Room);
+        onRoomCreated(newRoomData as Room);
         handleClose();
       }
-
-      // Note: We removed the redundant participantError check here as it's already handled in the individual flows above
     } catch (err: any) {
-      setError(err.message || 'Failed to create room')
+      console.error('Error in handleSubmit:', err); 
+      setError(err.message || 'Failed to create room. Please try again.');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -257,11 +261,13 @@ export function CreateRoomModal({
   
   const handlePatientSelect = (patient: Profile) => {
     setSelectedPatient(patient)
+    setSearchQuery('') // Clear search query after selection
     setShowPatientSearch(false)
   }
   
   const handleProfessionalSelect = (professional: Profile) => {
     setSelectedProfessional(professional)
+    setSearchQuery('') // Clear search query after selection
     setShowProfessionalSearch(false)
   }
 
@@ -279,13 +285,15 @@ export function CreateRoomModal({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {/* Room type selection */}
           <div className="flex gap-2 mb-4">
               <Button
                 type="button"
                 variant={roomType === '1:1' ? 'default' : 'outline'}
                 className="flex-1"
-                onClick={() => setRoomType('1:1')}
+                onClick={() => {
+                  setRoomType('1:1');
+                  // setIsGroupTherapy(false); // Removed
+                }}
               >
                 <UserRound className="h-4 w-4 mr-2" />
                 1:1 Session
@@ -294,14 +302,16 @@ export function CreateRoomModal({
                 type="button"
                 variant={roomType === 'group' ? 'default' : 'outline'}
                 className="flex-1"
-                onClick={() => setRoomType('group')}
+                onClick={() => {
+                  setRoomType('group');
+                  // setIsGroupTherapy(true); // Removed
+                }}
               >
                 <Users className="h-4 w-4 mr-2" />
                 Group Therapy
               </Button>
             </div>
           
-          {/* Patient selection - For 1:1 sessions with professional */}
           {roomType === '1:1' && currentUserRole === 'professional' && (
             <div className="space-y-2 pb-2">
               <Label>Select Patient</Label>
@@ -310,17 +320,14 @@ export function CreateRoomModal({
                   <div className="flex items-center gap-2">
                     <Heart className="h-4 w-4 text-primary" />
                     <span>
-                      {selectedPatient.first_name} {selectedPatient.last_name || ''}
-                      {!selectedPatient.first_name && selectedPatient.username && (
-                        <span>{selectedPatient.username}</span>
-                      )}
+                      {selectedPatient.first_name || selectedPatient.username} {selectedPatient.first_name && selectedPatient.last_name}
                     </span>
                   </div>
                   <Button 
                     type="button" 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => setSelectedPatient(null)}
+                    onClick={() => {setSelectedPatient(null); setSearchQuery('');}}
                   >
                     Change
                   </Button>
@@ -332,15 +339,16 @@ export function CreateRoomModal({
                       type="button" 
                       variant="outline" 
                       className="w-full justify-start text-muted-foreground"
+                      onClick={() => setShowPatientSearch(true)}
                     >
                       <Search className="h-4 w-4 mr-2" />
                       Search for a patient
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="start">
+                  <PopoverContent className="w-full p-0" align="start"> {/* Changed w-64 to w-full for better responsiveness */}
                     <div className="p-2">
                       <Input
-                        placeholder="Search patients"
+                        placeholder="Search patients by name or username"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="mb-2"
@@ -356,19 +364,15 @@ export function CreateRoomModal({
                           >
                             <Heart className="h-4 w-4 mr-2 text-primary" />
                             <div>
-                              {patient.first_name ? (
-                                <div className="font-medium">
-                                  {patient.first_name} {patient.last_name || ''}
-                                </div>
-                              ) : (
-                                <div className="font-medium">{patient.username || 'Unknown'}</div>
-                              )}
+                              <div className="font-medium">
+                                {patient.first_name || patient.username} {patient.first_name && patient.last_name}
+                              </div>
                             </div>
                           </div>
                         ))
                       ) : (
                         <div className="p-2 text-sm text-muted-foreground text-center">
-                          No patients found
+                          {searchQuery ? 'No patients found' : 'Type to search for patients'}
                         </div>
                       )}
                     </div>
@@ -378,7 +382,6 @@ export function CreateRoomModal({
             </div>
           )}
           
-          {/* Professional selection - For 1:1 sessions with patient */}
           {roomType === '1:1' && currentUserRole === 'patient' && (
             <div className="space-y-2 pb-2">
               <Label>Select Mental Health Professional</Label>
@@ -387,17 +390,14 @@ export function CreateRoomModal({
                   <div className="flex items-center gap-2">
                     <Stethoscope className="h-4 w-4 text-primary" />
                     <span>
-                      {selectedProfessional.first_name} {selectedProfessional.last_name || ''}
-                      {!selectedProfessional.first_name && selectedProfessional.username && (
-                        <span>{selectedProfessional.username}</span>
-                      )}
+                      {selectedProfessional.first_name || selectedProfessional.username} {selectedProfessional.first_name && selectedProfessional.last_name}
                     </span>
                   </div>
                   <Button 
                     type="button" 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => setSelectedProfessional(null)}
+                    onClick={() => {setSelectedProfessional(null); setSearchQuery('');}}
                   >
                     Change
                   </Button>
@@ -409,15 +409,16 @@ export function CreateRoomModal({
                       type="button" 
                       variant="outline" 
                       className="w-full justify-start text-muted-foreground"
+                      onClick={() => setShowProfessionalSearch(true)}
                     >
                       <Search className="h-4 w-4 mr-2" />
                       Search for a Mental Health Professional
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="start">
+                  <PopoverContent className="w-full p-0" align="start"> {/* Changed w-64 to w-full */}
                     <div className="p-2">
                       <Input
-                        placeholder="Search Mental Health Professionals"
+                        placeholder="Search by name or username"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="mb-2"
@@ -433,19 +434,15 @@ export function CreateRoomModal({
                           >
                             <Stethoscope className="h-4 w-4 mr-2 text-primary" />
                             <div>
-                              {professional.first_name ? (
-                                <div className="font-medium">
-                                  {professional.first_name} {professional.last_name || ''}
-                                </div>
-                              ) : (
-                                <div className="font-medium">{professional.username || 'Unknown'}</div>
-                              )}
+                               <div className="font-medium">
+                                {professional.first_name || professional.username} {professional.first_name && professional.last_name}
+                              </div>
                             </div>
                           </div>
                         ))
                       ) : (
                         <div className="p-2 text-sm text-muted-foreground text-center">
-                          No Mental Health Professionals found
+                           {searchQuery ? 'No professionals found' : 'Type to search for professionals'}
                         </div>
                       )}
                     </div>
@@ -459,25 +456,15 @@ export function CreateRoomModal({
           )}
           
           <div className="space-y-2">
-            <Label htmlFor="name">
-              {roomType === '1:1' ? 'Session Name' : 'Group Name'}
-            </Label>
+            <Label htmlFor="name">{roomType === '1:1' ? 'Session Title' : 'Group Name'}</Label>
             {roomType === '1:1' ? (
-              <div className="text-sm text-muted-foreground">
-                {currentUserRole === 'professional' && selectedPatient ? (
-                  <p>Session will be named: <span className="font-medium">{selectedPatient.first_name || selectedPatient.username || 'Patient'} {'<->'} {currentUser?.first_name || currentUser?.username || 'Professional'}</span></p>
-                ) : currentUserRole === 'patient' && selectedProfessional ? (
-                  <p>Session will be named: <span className="font-medium">{currentUser?.first_name || currentUser?.username || 'Patient'} {'<->'} {selectedProfessional.first_name || selectedProfessional.username || 'Professional'}</span></p>
-                ) : (
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter session name"
-                    disabled={loading}
-                    required
-                  />
-                )}
+              <div className="text-sm text-muted-foreground h-10 flex items-center px-3 py-2 border rounded-md bg-muted"> {/* Adjusted to look like disabled input */}
+                { (currentUserRole === 'professional' && selectedPatient) 
+                    ? <span className="font-medium">{`${selectedPatient.first_name || selectedPatient.username || 'Patient'} <-> ${currentUser?.first_name || currentUser?.username || 'Professional'}`}</span>
+                    : (currentUserRole === 'patient' && selectedProfessional)
+                        ? <span className="font-medium">{`${currentUser?.first_name || currentUser?.username || 'Patient'} <-> ${selectedProfessional.first_name || selectedProfessional.username || 'Professional'}`}</span>
+                        : <span className="text-muted-foreground italic">Select participants to auto-generate title</span>
+                }
               </div>
             ) : (
               <Input
@@ -486,7 +473,7 @@ export function CreateRoomModal({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter group name"
                 disabled={loading}
-                required
+                required 
               />
             )}
           </div>
@@ -497,15 +484,15 @@ export function CreateRoomModal({
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={roomType === '1:1' ? 'Enter session details' : 'Enter group description'}
+              placeholder={roomType === '1:1' ? 'Enter session details or reason for contact' : 'Enter group description'}
               disabled={loading}
             />
           </div>
           
-          {roomType !== '1:1' && (
+          {roomType === 'group' && ( // Changed from roomType !== '1:1' for clarity
             <div className="flex items-center justify-between">
-              <Label htmlFor="private" className="cursor-pointer">
-                Private Group
+              <Label htmlFor="private" className="cursor-pointer flex-grow">
+                Private Group (invitation only)
               </Label>
               <Switch
                 id="private"
@@ -524,8 +511,8 @@ export function CreateRoomModal({
             <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 
+            <Button type="submit" disabled={loading || (roomType === '1:1' && !( (currentUserRole === 'professional' && selectedPatient) || (currentUserRole === 'patient' && selectedProfessional) ) )}>
+              {loading ? 'Processing...' : 
                (roomType === '1:1' && currentUserRole === 'professional') ? 'Create Session' :
                (roomType === '1:1' && currentUserRole === 'patient') ? 'Send Request' :
                'Create Group'}
